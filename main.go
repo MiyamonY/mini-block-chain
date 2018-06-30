@@ -152,8 +152,7 @@ func main() {
 	log.Println("API PORT:", apiPort)
 	log.Println("P2P PORT:", p2pPort)
 
-	p2p := &p2p.P2PNetwork{}
-	_, err := p2p.Init(myHost, apiPort, p2pPort)
+	p2p, err := p2p.New(myHost, apiPort, p2pPort)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -172,10 +171,10 @@ func main() {
 	}
 
 	p2p.SetAction(p2p.CMD_NEWBLOCK, bc.NewBlock)
-	p2p.SetAction(p2p.CMD_ADDSRV, p2p.AddSrv)
+	p2p.SetAction(p2p.CMD_ADDSRV, p2p.AddServer)
 	p2p.SetAction(p2p.CMD_SENDBLOCK, bc.SendBlcok)
 	p2p.SetAction(p2p.CMD_MININGBOCK, bc.MiningBlock)
-	p2p.SetAction(p2p.CMD_ODIFYDATA, bc.ModifyData)
+	p2p.SetAction(p2p.CMD_MODIFYDATA, bc.ModifyData)
 
 	e := echo.New()
 	e.Use(middleware.Logger())
