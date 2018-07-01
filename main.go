@@ -14,6 +14,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/MiyamonY/mini-block-chain/block"
+	P2P "github.com/MiyamonY/mini-block-chain/p2p"
+
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 )
@@ -32,8 +35,8 @@ const (
 )
 
 var (
-	p2p *p2p.P2PNetwork
-	bc  *block.BlockCahin
+	p2p *P2P.P2PNetwork
+	bc  *block.BlockChain
 )
 
 func listBlocks(c echo.Context) error {
@@ -46,7 +49,7 @@ func getBlock(c echo.Context) error {
 	id := c.Param("id")
 	log.Println("getBlock:", id)
 
-	block := bc.BlockByData([]byte(id))
+	block := bc.GetBlockByData([]byte(id))
 
 	if block != nil {
 		return c.JSON(http.StatusOK, block)
@@ -92,7 +95,7 @@ func createBlock(c echo.Context) error {
 
 func addNode(c echo.Context) error {
 	fmt.Println("addNode:")
-	node := &p2p.Node{}
+	node := &P2P.Node{}
 
 	if err := c.Bind(node); err != nil {
 		fmt.Println(err)
@@ -114,7 +117,7 @@ func initBlockChain(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid Hight.")
 	}
-	bc.SycnBlockChain(index)
+	bc.SyncBlockChain(index)
 	return c.NoContent(http.StatusOK)
 }
 
@@ -152,29 +155,29 @@ func main() {
 	log.Println("API PORT:", apiPort)
 	log.Println("P2P PORT:", p2pPort)
 
-	p2p, err := p2p.New(myHost, apiPort, p2pPort)
+	p2p, err := P2P.New(myHost, apiPort, p2pPort)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
-	bc = &block.BlockChain()
-	if _, err := bc.Init(p2p, true); err != nil {
+	bc, err := block.New(p2p, true)
+	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	if *first {
-		bc.Initalized()
+		bc.Initialized()
 	}
 	if debugMode {
 		log.Printf("%+v", p2p)
 		log.Printf("%+v", bc)
 	}
 
-	p2p.SetAction(p2p.CMD_NEWBLOCK, bc.NewBlock)
-	p2p.SetAction(p2p.CMD_ADDSRV, p2p.AddServer)
-	p2p.SetAction(p2p.CMD_SENDBLOCK, bc.SendBlcok)
-	p2p.SetAction(p2p.CMD_MININGBOCK, bc.MiningBlock)
-	p2p.SetAction(p2p.CMD_MODIFYDATA, bc.ModifyData)
+	p2p.SetAction(P2P.CMD_NEWBLOCK, bc.NewBlock)
+	p2p.SetAction(P2P.CMD_ADDSRV, p2p.AddServer)
+	p2p.SetAction(P2P.CMD_SENDBLOCK, bc.SendBlock)
+	p2p.SetAction(P2P.CMD_MININGBOCK, bc.MiningBlock)
+	p2p.SetAction(P2P.CMD_MODIFYDATA, bc.ModifyData)
 
 	e := echo.New()
 	e.Use(middleware.Logger())

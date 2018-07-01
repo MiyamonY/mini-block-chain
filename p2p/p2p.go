@@ -257,15 +257,15 @@ func (p2p *P2PNetwork) AddServer(msg []byte) error {
 	return nil
 }
 
-func (p2p *P2PNetwork) New(host string, apiPort, p2pPort uint16) (*P2PNetwork, error) {
+func New(host string, apiPort, p2pPort uint16) (*P2PNetwork, error) {
 	log.Printf("initalize P2PNetwork")
-
-	p2p.nodes = make([]*Node, 0)
-	p2p.actions = make([]ActFn, 20)
 
 	node := &Node{Host: host, APIPort: apiPort, P2PPort: p2pPort, Self: true}
 	node.connect()
 
+	p2p := &P2PNetwork{}
+	p2p.nodes = make([]*Node, 0)
+	p2p.actions = make([]ActFn, 20)
 	p2p.nodes = append(p2p.nodes, node)
 	go p2p.P2PServ(host, p2pPort)
 
