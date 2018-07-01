@@ -94,7 +94,11 @@ func (bc *BlockChain) IsMining() bool {
 }
 
 func (bc *BlockChain) SyncBlockChain(hight int) error {
-	bc.RequestBlock(hight)
+	log.Printf("sync block chain")
+	if err := bc.RequestBlock(hight); err != nil {
+		log.Printf("RequestBlock() error. %s", err.Error())
+		return err
+	}
 	time.Sleep(1 * time.Second)
 	bc.initialized = true
 	return nil
@@ -116,11 +120,10 @@ func (bc *BlockChain) Create(data string, pow bool, primary bool) (*Block, error
 
 	lastBlock := bc.getPrevBlock()
 	block := &Block{Prev: lastBlock.Hash, TimeStamp: time.Now().UnixNano(), Data: data, Hight: lastBlock.Hight + 1}
-
 	if pow {
 		for i := 0; i < MaxPowCount; i++ {
 			block.Nonce = fmt.Sprintf("%x", rand.New(rand.NewSource(block.TimeStamp/int64(i+1))))
-			block.PowCount = 1
+			block.PowCount = i
 			block.hash()
 			if debugMode {
 				log.Printf("Try %d times %+v", i, block)
@@ -148,6 +151,8 @@ func (bc *BlockChain) Create(data string, pow bool, primary bool) (*Block, error
 func (bc *BlockChain) Check(data []byte) error {
 	log.Printf("Checking my Block Chian ...")
 	bc.mu.Lock()
+	defer bc.mu.Unlock()
+
 	prev := bc.blocks[0]
 	for i := 1; i < len(bc.blocks); i++ {
 		log.Printf("check %d", i)
@@ -157,28 +162,11 @@ func (bc *BlockChain) Check(data []byte) error {
 		}
 		prev = bc.blocks[i]
 	}
-	bc.mu.Unlock()
 
 	log.Printf("Check Done")
 	return nil
 }
 
-func (bc *BlockChain) getPrevBlock() *Block {
-	bc.mu.Lock()
-
-	block := bc.blocks[len(bc.blocks)-1]
-	longest := block
-	if len(block.Sibling) > 0 {
-		for _, b := range block.Sibling {
-			if len(block.Child) < len(b.Child) {
-				longest = b
-			}
-		}
-	}
-
-	bc.mu.Unlock()
-	return longest
-}
 func (bc *BlockChain) AddBlock(block *Block) error {
 	if debugMode {
 		log.Printf("AddBlock: %+v", block)
@@ -186,20 +174,28 @@ func (bc *BlockChain) AddBlock(block *Block) error {
 
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
+
 	if err := bc.blockAppendSimple(block); err != nil {
+		log.Printf("blockAppendSimple() error. %s", err.Error())
 		return err
 	}
+
 	lastBlock := bc.blocks[len(bc.blocks)-1]
 	for i, b := range bc.orphanBlocks {
 		if b.Prev == lastBlock.Prev {
 			if debugMode {
-				log.Printf("retry. list block before")
+				log.Printf("reappend orphan Block.")
+				log.Printf("list block. before")
 				bc.DumpChain()
 			}
 
 			bc.orphanBlocks = append(bc.orphanBlocks[:i], bc.orphanBlocks[i+1:]...)
 
-			bc.blockAppendSimple(b)
+			if err := bc.blockAppendSimple(b); err != nil {
+				log.Printf("blockAppendSimple() error. %s", err.Error())
+				return err
+			}
+
 			if debugMode {
 				log.Printf("list blcok after")
 				bc.DumpChain()
@@ -217,7 +213,7 @@ func (bc *BlockChain) RequestBlock(id int) error {
 	binary.LittleEndian.PutUint32(bid, uint32(id))
 	node := []byte(bc.p2p.Self())
 	sMsg := append(bid, node...)
-	log.Printf("%s", string(sMsg))
+	log.Printf("Request Block: %s", string(sMsg))
 	bc.p2p.SendOne(p2p.CMD_SENDBLOCK, sMsg)
 	return nil
 }
@@ -226,10 +222,11 @@ func (bc *BlockChain) GetBlock(hash string) *Block {
 	log.Printf("GetBlock: %s", hash)
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
+
 	for _, b := range bc.blocks {
 		log.Printf("%+v", b)
 		if b.Hash == hash {
-			log.Printf("GetBlock found: %+v", b)
+			log.Printf("GetBlock() found: %+v", b)
 			return b
 		}
 	}
@@ -247,6 +244,7 @@ func (bc *BlockChain) GetBlockByIndex(index int) *Block {
 		log.Printf("GetBlockByIndex found: %+v", b)
 		return b
 	}
+
 	return nil
 }
 
@@ -360,8 +358,7 @@ func (bc *BlockChain) miningBlock(data []byte, primary bool) error {
 	}
 
 	d := data
-	block, err := bc.Create(string(d), true, primary)
-	if err == nil {
+	if block, err := bc.Create(string(d), true, primary); err == nil {
 		b, err := json.Marshal(block)
 		if err != nil {
 			log.Printf("json marshal error")
@@ -373,11 +370,14 @@ func (bc *BlockChain) miningBlock(data []byte, primary bool) error {
 	bc.stopMining()
 	return nil
 }
+
 func (bc *BlockChain) SaveData(data []byte) error {
 	log.Printf("save data : %s", string(data))
 
-	bc.p2p.Broadcast(p2p.CMD_MININGBOCK, data, false)
+	bc.p2p.Broadcast(p2p.CMD_MININGBLOCK, data, false)
+
 	go bc.miningBlock(data, true)
+
 	return nil
 }
 
@@ -423,6 +423,23 @@ func (bc *BlockChain) Modify(hight int, data string) error {
 	log.Printf("sMsg = %s", sMsg)
 	bc.p2p.Broadcast(p2p.CMD_MODIFYDATA, sMsg, true)
 	return nil
+}
+
+func (bc *BlockChain) getPrevBlock() *Block {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+
+	block := bc.blocks[len(bc.blocks)-1]
+	longest := block
+	if len(block.Sibling) > 0 {
+		for _, b := range block.Sibling {
+			if len(block.Child) < len(b.Child) {
+				longest = b
+			}
+		}
+	}
+
+	return longest
 }
 
 func (bc *BlockChain) startMining() error {

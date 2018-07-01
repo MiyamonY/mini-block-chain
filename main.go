@@ -168,6 +168,7 @@ func main() {
 	if *first {
 		bc.Initialized()
 	}
+
 	if debugMode {
 		log.Printf("%+v", p2p)
 		log.Printf("%+v", bc)
@@ -176,7 +177,7 @@ func main() {
 	p2p.SetAction(P2P.CMD_NEWBLOCK, bc.NewBlock)
 	p2p.SetAction(P2P.CMD_ADDSRV, p2p.AddServer)
 	p2p.SetAction(P2P.CMD_SENDBLOCK, bc.SendBlock)
-	p2p.SetAction(P2P.CMD_MININGBOCK, bc.MiningBlock)
+	p2p.SetAction(P2P.CMD_MININGBLOCK, bc.MiningBlock)
 	p2p.SetAction(P2P.CMD_MODIFYDATA, bc.ModifyData)
 
 	e := echo.New()
