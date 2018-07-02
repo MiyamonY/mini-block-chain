@@ -192,24 +192,23 @@ func (p2p *P2PNetwork) List() []*Node {
 }
 
 func (p2p *P2PNetwork) Broadcast(cmd int, msg []byte, self bool) {
-	log.Printf("Broadcast : cmd %d, msg %s", cmd, string(msg))
+	log.Printf("Broadcast(): cmd %d, msg: %s", cmd, string(msg))
+
 	sMsg := append([]byte{byte(cmd)}, msg...)
-	if debugMode {
-		log.Print(sMsg)
-	}
 
 	for _, node := range p2p.nodes {
-		if debugMode {
-			log.Print(node)
-		}
-
 		if self == false && node.Self {
 			log.Printf("not send")
 			continue
 		}
 
+		log.Printf("Broadcast : cmd %d, msg %s, to node %+v", cmd, string(msg), node)
 		if err := node.Send(sMsg); err != nil {
 			log.Printf("send error. %s", err.Error())
+		}
+
+		if debugMode {
+			log.Printf("send to node %+v", node)
 		}
 		time.Sleep(1 * time.Second / 2)
 	}
@@ -263,10 +262,9 @@ func New(host string, apiPort, p2pPort uint16) (*P2PNetwork, error) {
 	node := &Node{Host: host, APIPort: apiPort, P2PPort: p2pPort, Self: true}
 	node.connect()
 
-	p2p := &P2PNetwork{}
-	p2p.nodes = make([]*Node, 0)
-	p2p.actions = make([]ActFn, 20)
+	p2p := &P2PNetwork{nodes: make([]*Node, 0), actions: make([]ActFn, 20)}
 	p2p.nodes = append(p2p.nodes, node)
+
 	go p2p.P2PServ(host, p2pPort)
 
 	if debugMode {

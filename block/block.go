@@ -26,7 +26,7 @@ import (
 
 const (
 	MaxPowCount = 60
-	Difficulty  = "00"
+	Difficulty  = "0"
 )
 
 var (
@@ -80,12 +80,18 @@ type BlockChain struct {
 func New(p2p *p2p.P2PNetwork, first bool) (*BlockChain, error) {
 	log.Printf("Block New")
 	bc := &BlockChain{p2p: p2p, initialized: false, mining: false, info: "mini block chain v0.1"}
+	bc.blocks = make([]*Block, 0)
+	bc.invalidBlocks = make([]*Block, 0)
+	bc.orphanBlocks = make([]*Block, 0)
 
 	if first {
 		block := &Block{Hight: 0, TimeStamp: 0, Data: "Genesis Block"}
+		block.Child = make([]*Block, 0)
+		block.Sibling = make([]*Block, 0)
 		block.hash()
 		bc.blocks = append(bc.blocks, block)
 	}
+
 	return bc, nil
 }
 
@@ -114,15 +120,14 @@ func (bc *BlockChain) IsInitialized() bool {
 }
 
 func (bc *BlockChain) Create(data string, pow bool, primary bool) (*Block, error) {
-	if debugMode {
-		log.Printf("Create: %s", data)
-	}
+	log.Printf("Create: %s", data)
 
 	lastBlock := bc.getPrevBlock()
-	block := &Block{Prev: lastBlock.Hash, TimeStamp: time.Now().UnixNano(), Data: data, Hight: lastBlock.Hight + 1}
+	block := &Block{Prev: lastBlock.Hash, TimeStamp: time.Now().UnixNano(), Data: data, Hight: lastBlock.Hight + 1,
+		Child: make([]*Block, 0), Sibling: make([]*Block, 0)}
 	if pow {
 		for i := 0; i < MaxPowCount; i++ {
-			block.Nonce = fmt.Sprintf("%x", rand.New(rand.NewSource(block.TimeStamp/int64(i+1))))
+			block.Nonce = fmt.Sprintf("%x", rand.New(rand.NewSource(block.TimeStamp/int64(i+1))).Int63())
 			block.PowCount = i
 			block.hash()
 			if debugMode {
@@ -349,13 +354,19 @@ func (bc *BlockChain) SendBlock(msg []byte) error {
 }
 
 func (bc *BlockChain) MiningBlock(data []byte) error {
+	log.Printf("MiningBlock()")
 	return bc.miningBlock(data, false)
 }
 
 func (bc *BlockChain) miningBlock(data []byte, primary bool) error {
+	log.Printf("miningBlock()")
+
 	if err := bc.startMining(); err != nil {
+		log.Printf("%s", err.Error())
 		return err
 	}
+
+	log.Printf("start mining")
 
 	d := data
 	if block, err := bc.Create(string(d), true, primary); err == nil {
@@ -368,11 +379,13 @@ func (bc *BlockChain) miningBlock(data []byte, primary bool) error {
 	}
 
 	bc.stopMining()
+	log.Printf("mining done")
+
 	return nil
 }
 
 func (bc *BlockChain) SaveData(data []byte) error {
-	log.Printf("save data : %s", string(data))
+	log.Printf("SaveData() save data %s", string(data))
 
 	bc.p2p.Broadcast(p2p.CMD_MININGBLOCK, data, false)
 
@@ -444,7 +457,7 @@ func (bc *BlockChain) getPrevBlock() *Block {
 
 func (bc *BlockChain) startMining() error {
 	bc.mu.Lock()
-	defer bc.mu.Lock()
+	defer bc.mu.Unlock()
 
 	if !bc.initialized {
 		log.Printf("block is uninitialized. can't start mining")

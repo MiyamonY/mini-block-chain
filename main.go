@@ -79,7 +79,7 @@ type Data struct {
 }
 
 func createBlock(c echo.Context) error {
-	fmt.Println("createBlock:")
+	log.Printf("CreateBlock()")
 	if bc.IsMining() {
 		return echo.NewHTTPError(http.StatusConflict, "Already Mining")
 	}
@@ -98,15 +98,15 @@ func addNode(c echo.Context) error {
 	node := &P2P.Node{}
 
 	if err := c.Bind(node); err != nil {
-		fmt.Println(err)
+		log.Printf("Bind() error. %s", err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid server info.")
 	}
 
-	id, err := p2p.Add(node)
-	if debugMode {
-		log.Println(id)
-		log.Println(err)
+	if _, err := p2p.Add(node); err != nil {
+		log.Printf("p2p.Add() error. %s", err)
+		return echo.NewHTTPError(http.StatusBadRequest, "p2p Add error.")
 	}
+
 	return c.NoContent(http.StatusOK)
 }
 
@@ -142,6 +142,8 @@ func requestHandler(c echo.Context) error {
 }
 
 func main() {
+	log.SetFlags(log.Ltime | log.Lmicroseconds | log.Llongfile)
+
 	apiport := flag.Int("apiport", API_PORT, "API port number")
 	p2pport := flag.Int("p2pport", P2P_PORT, "P2P port number")
 	host := flag.String("host", HOST, "host name")
@@ -155,18 +157,21 @@ func main() {
 	log.Println("API PORT:", apiPort)
 	log.Println("P2P PORT:", p2pPort)
 
-	p2p, err := P2P.New(myHost, apiPort, p2pPort)
+	var err error
+	p2p, err = P2P.New(myHost, apiPort, p2pPort)
 	if err != nil {
-		log.Fatalf("%+v", err)
+		log.Fatalf("p2p initalize error. %s", err.Error())
 	}
 
-	bc, err := block.New(p2p, true)
+	bc, err = block.New(p2p, true)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	if *first {
-		bc.Initialized()
+		if err := bc.Initialized(); err != nil {
+			log.Fatalf("blcok initialize error. %s", err.Error())
+		}
 	}
 
 	if debugMode {
